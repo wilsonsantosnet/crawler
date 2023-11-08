@@ -1,6 +1,6 @@
-# Precisa instalar esse 
+# Precisa instalar esse coversor de PDF
 https://wkhtmltopdf.org/
 
-# ScrapySharp
+# Depende desse pacote nuget ScrapySharp
 https://github.com/rflechner/ScrapySharp
 https://github.com/rflechner/ScrapySharp/blob/master/LICENSE

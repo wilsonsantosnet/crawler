@@ -1,17 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>true</ImplicitUsings>
+        <RootNamespace>Crawler</RootNamespace>
+        <OutputType>exe</OutputType>
+        <PublishSingleFile Condition="'$(Configuration)' == 'Release'">true</PublishSingleFile>
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        <PlatformTarget>x64</PlatformTarget>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="ScrapySharp" Version="3.0.0" />
-  </ItemGroup>
-
-
-
+    <ItemGroup>
+        <PackageReference Include="Selenium.WebDriver" Version="4.15.0" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="5.0.0" />
+    </ItemGroup>
+    <ItemGroup>
+        <None Update="appsettings.json">
+	        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
 
 </Project>

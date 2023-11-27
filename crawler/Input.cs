@@ -4,22 +4,28 @@
     {
         public Input()
         {
-            this.waitTimeout = 3000;
+            this.waitTimeout = 6000;
+            this.waitForExit = 60000;
             this.prefixo = "main";
             this.blackList = new();
             this.whiteDomainList = new();
-            this.sameDomain = true;
+            this.sameDomain = false;
             this.selectorType = SelectorType.tag;
         }
 
-        public enum SelectorType { id, tag }
+        public enum SelectorType { id, tag, classname }
 
         public int id { get; set; }
         public SelectorType selectorType { get; set; }
         public string link { get; set; }
         public string selector { get; set; }
+        
+        
         public bool iteration { get; set; }
         public int waitTimeout { get; set; }
+
+        public int waitForExit { get; set; }
+        
 
         public string error { get; set; }
 
@@ -32,6 +38,10 @@
         public List<string> blackList { get; set; }
 
         public List<string> whiteDomainList { get; set; }
+
+        public string filenameHTML { get { return this.prefixo + "-" + this.id + ".html"; } }
+        public string filenamePDF { get { return this.prefixo + "-" + this.id + ".pdf"; } }
+
 
     }
 

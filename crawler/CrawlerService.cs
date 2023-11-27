@@ -31,22 +31,28 @@ namespace Crawler
             var urls = new List<Input> {
                 new Input {
                     id = 1,
-                    link = "https://wilsonsantosnet.medium.com/artigo-a-61d460aff07c",
-                    blackList = new List<string>
-                    {
-                        "?source=",
-                        "signin",
-                        "-----"
-                    },
-                    whiteDomainList = new List<string>
-                    {
-                        "https://medium.com",
-                        "https://wilsonsantosnet.medium.com"
-                    },
-                    selector = "section",
-                    selectorType = Input.SelectorType.tag
-
+                    link = "https://portal.azure.com/#home",
+                    iteration = true,
+                    //selector = "_tab_0_panel_0",
+                    //selectorType = Input.SelectorType.id
                 },
+                //new Input {
+                //    id = 2,
+                //    link = "https://wilsonsantosnet.medium.com/artigo-a-61d460aff07c",
+                //    blackList = new List<string>
+                //    {
+                //        "?source=",
+                //        "signin",
+                //        "-----"
+                //    },
+                //    whiteDomainList = new List<string>
+                //    {
+                //        "https://medium.com",
+                //        "https://wilsonsantosnet.medium.com"
+                //    },
+                //    selector = "section",
+                //    selectorType = Input.SelectorType.tag
+                //},
             };
 
             if (args.Length > 0)
@@ -64,15 +70,26 @@ namespace Crawler
                 if (args.Where(_ => _.StartsWith("--selectorType=")).Any())
                     inputParam.selectorType = (Input.SelectorType)Convert.ToInt16(args.Where(_ => _.StartsWith("--selectorType=")).FirstOrDefault().Split("=").LastOrDefault());
 
+
                 if (args.Where(_ => _.StartsWith("--rules")).Any())
                 {
                     inputParam.blackList.AddRange(_config.BlackList.Split(";"));
                     inputParam.whiteDomainList.AddRange(_config.WhiteDomainList.Split(";"));
                 }
 
+                if (args.Where(_ => _.StartsWith("--waitTimeout=")).Any())
+                    inputParam.waitTimeout = Convert.ToInt32(args.Where(_ => _.StartsWith("--waitTimeout=")).FirstOrDefault().Split("=").LastOrDefault());
+
+                if (args.Where(_ => _.StartsWith("--waitForExit=")).Any())
+                    inputParam.waitForExit = Convert.ToInt32(args.Where(_ => _.StartsWith("--waitForExit=")).FirstOrDefault().Split("=").LastOrDefault());
+
+
+                if (args.Where(_ => _.StartsWith("--iteration")).Any())
+                {
+                    inputParam.iteration = true;
+                }
+
                 urls.Add(inputParam);
-
-
 
             }
 
@@ -120,6 +137,11 @@ namespace Crawler
 
             if (executeProcessFilesLinks) await ProcessFilesLinks();
 
+
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("Process end");
+            Console.ResetColor();
+
         }
 
         private void SaveAllLinks()
@@ -151,20 +173,18 @@ namespace Crawler
         {
             foreach (var input in inputs.Where(_ => _.iteration))
             {
-                await ConvertContentHtml(_config.OutputFolderPathHtml, _config.OutputFolderPathPDF, input, disableIteration: false);
+                await ConvertContentHtml(input);
             }
 
             //Parallel.ForEach(inputs.Where(_ => !_.iteration), async (input) =>
             foreach (var input in inputs.Where(_ => !_.iteration))
             {
-                await ConvertContentHtml(_config.OutputFolderPathHtml, _config.OutputFolderPathPDF, input, disableIteration: false);
+                await ConvertContentHtml(input);
             };
         }
 
         private async Task ExtractLinks(List<Input> inputs)
         {
-
-            SaveLinks("main.txt", inputs);
 
             foreach (var input in inputs.Where(_ => _.iteration))
             {
@@ -217,7 +237,7 @@ namespace Crawler
                 //Parallel.ForEach(inputs, async (input) =>
                 foreach (Input input in inputs)
                 {
-                    await ConvertContentHtml(_config.OutputFolderPathHtml, _config.OutputFolderPathPDF, input, disableIteration: true);
+                    await ConvertContentHtml(input);
                 };
 
                 if (invalidLinks.Any())
@@ -241,20 +261,24 @@ namespace Crawler
             }
         }
 
-        private async Task ConvertContentHtml(string outputFolderPathHtml, string outputFolderPathPDF, Input input, bool disableIteration)
+        private async Task ConvertContentHtml(Input input)
         {
 
             try
             {
+                var errorCount = 0;
+                var content = await GetHtmlFromUrlBySelenium(input, errorCount);
 
-                var content = await GetHtmlFromUrlBySelenium(input, disableIteration);
-
-                var fileNameHtml = Path.Combine(outputFolderPathHtml, input.prefixo + "-" + input.id + ".html");
+                var fileNameHtml = Path.Combine(_config.OutputFolderPathHtml, input.filenameHTML);
                 SaveHtml(input, content, fileNameHtml);
 
-                var fileNamePDF = Path.Combine(outputFolderPathPDF, input.prefixo + "-" + input.id + ".pdf");
-                SavePdfFromHtmlWkhtmltopdf(input, fileNameHtml, Path.GetFullPath(fileNamePDF));
-
+                var fileNamePDF = Path.Combine(_config.OutputFolderPathPDF, input.filenamePDF);
+                
+                if (_config.PdfMethod == 1)
+                    SavePdfFromHtmlWkhtmltopdf(input, fileNameHtml, Path.GetFullPath(fileNamePDF));
+                
+                if (_config.PdfMethod == 2)
+                    SavePdfFromHtmlChrome(input, Path.GetFullPath(fileNameHtml), Path.GetFullPath(fileNamePDF));
 
             }
             catch (Exception ex)
@@ -296,10 +320,8 @@ namespace Crawler
 
             try
             {
-                //var httpClient = new HttpClient();
-                //var html = await httpClient.GetStringAsync(input.link);
-
-                var html = await GetHtmlFromUrlBySelenium(input, false);
+                var errorCount = 0;
+                var html = await GetHtmlFromUrlBySelenium(input, errorCount);
 
                 var uri = new Uri(input.link);
                 var baseDomain = $"{uri.Scheme}://{uri.Host}";
@@ -408,27 +430,30 @@ namespace Crawler
             return links;
         }
 
-        async Task<string> GetHtmlFromUrlBySelenium(Input input, bool disableIteration)
+        async Task<string> GetHtmlFromUrlBySelenium(Input input, int errorCount)
         {
             var pageSource = "";
 
-            IWebDriver driver = GetInstaceSeleniumWebDriver();
+            IWebDriver driver = GetInstaceSeleniumWebDriver(input);
 
             try
             {
-
-
                 // Navegar para a página da web desejada
                 driver.Navigate().GoToUrl(input.link);
 
-                if (input.iteration && !disableIteration)
+                if (input.iteration)
                 {
                     while (true)
                     {
+                        Console.ForegroundColor = ConsoleColor.Yellow;
                         Console.WriteLine("Quando desejar seguir digite S");
+                        Console.ResetColor();
                         var continueprocess = Console.ReadLine();
                         if (continueprocess.ToUpper() == "S")
+                        {
+                            input.iteration = false;
                             break;
+                        }
                     }
 
                 }
@@ -455,6 +480,13 @@ namespace Crawler
                         //string conteudo = elemento.Text;
                         pageSource = elemento.GetAttribute("innerHTML");
                     }
+
+                    if (input.selectorType == Input.SelectorType.classname)
+                    {
+                        IWebElement elemento = driver.FindElement(By.ClassName(input.selector));
+                        //string conteudo = elemento.Text;
+                        pageSource = elemento.GetAttribute("innerHTML");
+                    }
                 }
                 else
                 {
@@ -463,56 +495,100 @@ namespace Crawler
 
                 // Fechar o navegador
                 //driver.Quit();
-
-
+                //driver.Dispose();
             }
             catch (Exception ex)
             {
-                // Fechar o navegador
-                //driver.Quit();
-                throw ex;
-            }
+                Console.ForegroundColor = ConsoleColor.Red;
+                var error = ex.Message + " tentativa " + errorCount;
+                Console.WriteLine(error);
+                Console.ResetColor();
+                errorCount++;
 
+                //if (driver != null)
+                //{
+                //    driver.Dispose();
+                //}
+
+                //if (errorCount < 5)
+                //    return await GetHtmlFromUrlBySelenium(input, errorCount);
+
+                //throw ex;
+            }
             return pageSource;
 
         }
 
 
-        private IWebDriver GetInstaceSeleniumWebDriver()
+        private IWebDriver GetInstaceSeleniumWebDriver(Input input)
         {
-            // Especifique o caminho para o ChromeDriver.exe
-            //string driverPath = "C:\\chromedriver_win32\\chromedriver.exe";
-            //string driverPath = "C:\\chromedriver-win64\\";
+
             string driverPath = _config.DriverPath;
 
             // Configurar as opções do Chrome
             var chromeOptions = new ChromeOptions();
-            //chromeOptions.AddArgument("--headless"); // Opcional: Executar o Chrome em modo headless (sem interface gráfica)
-            //chromeOptions.AddArgument("--user-data-dir=C:\\Users\\wdossantos\\AppData\\Local\\Google\\Chrome\\User Data\\"); // Opcional: Executar o Chrome em modo headless (sem interface gráfica)
-            //chromeOptions.AddArgument("--user-data-dir=C:\\Users\\AB670412\\AppData\\Local\\Google\\Chrome\\User Data\\"); // Opcional: Executar o Chrome em modo headless (sem interface gráfica)
-            //chromeOptions.AddArgument(_config.AddArgument); // Opcional: Executar o Chrome em modo headless (sem interface gráfica)
-            //chromeOptions.AddArgument("--disable-logging");
-            //chromeOptions.AddArgument("--log-level=3");
-            //chromeOptions.AddArgument("--output=/dev/null");
 
-            var arguments = _config.AddArgument.Split(" ");
-            foreach (var item in arguments)
+            var arguments1 = _config.AddArgument.Split(" ");
+            foreach (var item in arguments1)
             {
                 chromeOptions.AddArgument(item);
             }
 
-            // Inicializar o driver do Chrome
+
+
+            //Inicializar o driver do Chrome
             if (_driver == null)
                 _driver = new ChromeDriver(driverPath, chromeOptions);
 
             return _driver;
-        }
 
+            //return new ChromeDriver(driverPath, chromeOptions);
+        }
+        void SavePdfFromHtmlChrome(Input input, string htmlFilePath, string pdfFilePath)
+        {
+            var p = new System.Diagnostics.Process()
+            {
+                StartInfo =
+                {
+                    FileName = _config.ChromePath,
+                    //FileName = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+                    //Arguments = $@"/C --headless --disable-gpu --run-all-compositor-stages-before-draw --no-pdf-header-footer --print-to-pdf=""{pdfFilePath}"" ""{htmlFilePath}""",
+                    //Arguments = $@"/C {_config.AddArgument2}--print-to-pdf=""{pdfFilePath}"" ""{input.link}""",
+                    Arguments = $@"/C {_config.AddArgument2} --print-to-pdf=""{pdfFilePath}"" ""{htmlFilePath}""",
+                }
+            };
+
+            p.Start();
+
+            // ...then wait n milliseconds for exit (as after exit, it can't read the output)
+            p.WaitForExit(input.waitForExit);
+
+            // read the exit code, close process
+            int returnCode = p.ExitCode;
+            p.Close();
+
+            if (File.Exists(pdfFilePath))
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("PDF " + input.id + " da página " + input.link + " salvo em " + pdfFilePath);
+                Console.ResetColor();
+
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                var error = "PDF da página " + input.link + " não encontrado em " + pdfFilePath;
+                Console.WriteLine(error);
+                Console.ResetColor();
+                throw new Exception(error);
+            }
+
+        }
         void SavePdfFromHtmlWkhtmltopdf(Input input, string htmlFilePath, string pdfFilePath)
         {
             ProcessStartInfo startInfo = new ProcessStartInfo();
             startInfo.FileName = _config.Pdfexe;
-            startInfo.Arguments = $"{htmlFilePath} {pdfFilePath}";
+            startInfo.Arguments = $"{_config.PdfArguments}{htmlFilePath} {pdfFilePath}";
             startInfo.UseShellExecute = false;
             startInfo.CreateNoWindow = true;
 

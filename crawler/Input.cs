@@ -4,13 +4,14 @@
     {
         public Input()
         {
-            this.waitTimeout = 6000;
-            this.waitForExit = 60000;
             this.prefixo = "main";
             this.blackList = new();
             this.whiteDomainList = new();
-            this.sameDomain = false;
             this.selectorType = SelectorType.tag;
+            this.cromeDriverTimeout = 240;
+            this.waitTimeout = 6000;
+            this.waitForExit = 60000;
+
         }
 
         public enum SelectorType { id, tag, classname }
@@ -19,13 +20,8 @@
         public SelectorType selectorType { get; set; }
         public string link { get; set; }
         public string selector { get; set; }
-        
-        
-        public bool iteration { get; set; }
-        public int waitTimeout { get; set; }
 
-        public int waitForExit { get; set; }
-        
+        public bool iteration { get; set; }
 
         public string error { get; set; }
 
@@ -33,14 +29,19 @@
 
         public string prefixo { get; set; }
 
-        public bool sameDomain { get; set; }
-
         public List<string> blackList { get; set; }
 
         public List<string> whiteDomainList { get; set; }
 
         public string filenameHTML { get { return this.prefixo + "-" + this.id + ".html"; } }
+
         public string filenamePDF { get { return this.prefixo + "-" + this.id + ".pdf"; } }
+
+        public int cromeDriverTimeout { get; set; }
+
+        public int waitTimeout { get; set; }
+
+        public int waitForExit { get; set; }
 
 
     }

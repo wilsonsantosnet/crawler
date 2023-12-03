@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net6.0</TargetFramework>
@@ -12,7 +12,17 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Selenium.WebDriver" Version="4.15.0" />
+      <None Remove="url-input.txt" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Compile Include="url-input.txt">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </Compile>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Selenium.WebDriver" Version="3.141.0" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.0" />
         <PackageReference Include="Microsoft.Extensions.Http" Version="5.0.0" />
     </ItemGroup>

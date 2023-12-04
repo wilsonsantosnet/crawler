@@ -16,7 +16,7 @@ namespace Crawler
             this.ReplaceHtml = new Dictionary<string, string>
             {
                 //{ "<img src=\"../","<img src=\"http://seuportal.vivo.com.br/portal_unico/midias/hotsites/" },
-                { "<img src=\"/VivoStart/","<img src=\"https://vivo.my.site.com/VivoStart/" }
+                //{ "<img src=\"/VivoStart/","<img src=\"https://vivo.my.site.com/VivoStart/" }
             };
             this.TryCount = 0;
             this.OutputFolderPathHtml = "html_outputs";

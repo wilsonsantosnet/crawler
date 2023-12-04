@@ -12,6 +12,7 @@
             this.waitTimeout = 6000;
             this.waitForExit = 60000;
 
+
         }
 
         public enum SelectorType { id, tag, classname }
@@ -42,6 +43,8 @@
         public int waitTimeout { get; set; }
 
         public int waitForExit { get; set; }
+
+        public bool savePartial { get; set; }
 
 
     }

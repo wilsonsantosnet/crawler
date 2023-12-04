@@ -13,8 +13,8 @@ namespace Crawler
     public class CrawlerService
     {
 
-        private readonly List<Input> _invalidLinks = new();
-        private readonly List<Input> _validLinks = new();
+        private readonly HashSet<Input> _invalidLinks = new();
+        private readonly HashSet<Input> _validLinks = new();
         private readonly WorkerConfig _config;
         private readonly HttpClient _clientHttp;
 
@@ -31,9 +31,19 @@ namespace Crawler
         public async Task Run(string[] args)
         {
             var urls = new List<Input> {
+                //new Input {
+                //    id = 1,
+                //    link = "http://seuportal.vivo.com.br/nosso_portal/movel/movel_pf/",
+                //    iteration = true
+                //},
+                //new Input {
+                //    id = 1,
+                //    link = "http://vivo.my.salesforce.com",
+                //    iteration = true
+                //},
                 new Input {
                     id = 1,
-                    link = "https://portal.azure.com/",
+                    link = "https://vivo.my.site.com/VivoStart/s/article/IT-Como-fazer-envio-de-protocolo-no-360",
                     iteration = true,
                 }
             };
@@ -138,6 +148,11 @@ namespace Crawler
                     inputParam.iteration = true;
                 }
 
+                if (args.Where(_ => _.StartsWith("--savepartial")).Any())
+                {
+                    inputParam.savePartial = true;
+                }
+
                 if (args.Where(_ => _.StartsWith("--file=")).Any())
                 {
                     var file = args.Where(_ => _.StartsWith("--file=")).FirstOrDefault().Split("=").LastOrDefault();
@@ -158,7 +173,8 @@ namespace Crawler
                             waitForExit = inputParam.waitForExit,
                             waitTimeout = inputParam.waitTimeout,
                             cromeDriverTimeout = inputParam.cromeDriverTimeout,
-                        });
+                            savePartial = inputParam.savePartial
+                        }); ;
                         count++;
                     }
                 }
@@ -198,7 +214,7 @@ namespace Crawler
         private void SaveInvalidLinks()
         {
             var filePath = "all-links.err";
-            SaveLinks(filePath, _invalidLinks);
+            SaveLinks(filePath, _invalidLinks.ToList());
         }
 
         private void SaveLinksDataverse()
@@ -225,7 +241,7 @@ namespace Crawler
         {
             foreach (var input in inputs)
             {
-                await ConvertContentHtml(input);
+                await ConvertContentHtmlPDF(input);
             }
 
         }
@@ -297,26 +313,14 @@ namespace Crawler
             {
                 var contentFile = ReadAllText(inputFilePath);
 
-                //var contentFile = File.ReadAllText(inputFilePath);
                 var inputs = JsonSerializer.Deserialize<List<Input>>(contentFile);
                 LogGreen("Processando " + inputs.Count() + " links do aquivo " + inputFilePath);
 
-                //Parallel.ForEach(inputs, async (input) =>
                 foreach (Input input in inputs)
                 {
-                    await ConvertContentHtml(input);
+                    await ConvertContentHtmlPDF(input);
                 };
 
-                //if (_invalidLinks.Any())
-                //{
-                //    var errorFile = inputFilePath.Replace(".txt", ".err");
-
-                //    LogRed("Gerado " + _invalidLinks.Count() + " links do aquivo " + errorFile);
-
-                //    // Salve o HTML no arquivo
-                //    File.WriteAllText(errorFile, string.Join(Environment.NewLine, _invalidLinks));
-                //    _invalidLinks.Clear();
-                //}
 
             }
             catch (Exception ex)
@@ -338,14 +342,17 @@ namespace Crawler
 
             return conteudoLido;
         }
-
-        private async Task ConvertContentHtml(Input input)
+        private async Task ConvertContentHtmlPDF(Input input)
+        {
+            var errorCount = 0;
+            var content = await GetHtmlFromUrlBySelenium(input, errorCount);
+            await ConvertContentHtmlPDF(input, content, errorCount);
+        }
+        private async Task ConvertContentHtmlPDF(Input input, string content, int erroCount)
         {
 
             try
             {
-                var errorCount = 0;
-                var content = await GetHtmlFromUrlBySelenium(input, errorCount);
 
                 var result = content;
                 result = ReplaceHtmlContent(content);
@@ -370,9 +377,8 @@ namespace Crawler
             }
             catch (Exception ex)
             {
-                var error = $"Ocorreu um erro no link: {input.link} [" + ex.Message + "]";
+                var error = $"# Ocorreu um erro no link: {input.link} [" + ex.Message + "]  adicionado como invalido";
                 LogRed(error);
-                LogYellow("Link " + input.link + " adicionado como invalido [Exception]");
 
                 _invalidLinks.Add(new Input
                 {
@@ -384,6 +390,7 @@ namespace Crawler
                     selectorType = input.selectorType,
                     error = error,
                     sourceId = input.id,
+                    savePartial = input.savePartial
                 });
             }
         }
@@ -399,43 +406,39 @@ namespace Crawler
 
         private async Task GetLink(Input input)
         {
-
             string filePath = GetValidFileName(input.link + ".log");
 
             try
             {
+
                 var errorCount = 0;
-                var html = await GetHtmlFromUrlBySelenium(input, errorCount);
-                if (string.IsNullOrEmpty(html))
+                var content = await GetHtmlFromUrlBySelenium(input, errorCount);
+                if (string.IsNullOrEmpty(content))
                 {
                     _invalidLinks.Add(input);
-                    LogYellow("Link " + input.link + " adicionado como invalido [html vazio]");
+                    LogYellow("* Link " + input.link + " adicionado como invalido [html vazio]");
                     return;
                 }
 
-                var uri = new Uri(input.link);
-                var baseDomain = $"{uri.Scheme}://{uri.Host}";
+                LogYellow("* Link " + input.link + " adicionado como valido");
+                _validLinks.Add(input);
 
-                var links = GetLinksFromHtml(html, input, baseDomain, filePath);
+                await ConvertContentHtmlPDF(input, content, errorCount);
 
-                if (!_validLinks.Where(_ => _.link == input.link).Any())
-                    _validLinks.Add(input);
+                LogGreen($"[ Exitem {_validLinks.Count()} links validos, e {_invalidLinks.Count} invalidos ]");
 
-                if (links.Count > 0)
+                var sublinks = GetLinksFromHtml(content, input, filePath);
+
+                if (sublinks.Count > 0)
                 {
-                    SaveLinks(filePath, links);
+                    var newlinks = sublinks.Where(link => !_validLinks.Any(validLink => validLink.link == link.link)).ToList();
+                    SaveLinks(filePath, newlinks);
 
 
-                    var newlinks = links.Where(link => !_validLinks.Any(validLink => validLink.link == link.link)).ToList();
-                    _validLinks.AddRange(newlinks);
-
-
-                    foreach (var link in links)
+                    foreach (var link in newlinks)
                     {
                         await GetLink(link);
                     }
-
-
                 }
                 else
                 {
@@ -471,9 +474,12 @@ namespace Crawler
         }
 
 
-        List<Input> GetLinksFromHtml(string html, Input input, string baseDomain, string filePath)
+        HashSet<Input> GetLinksFromHtml(string html, Input input, string filePath)
         {
-            List<Input> links = new List<Input>();
+            var links = new HashSet<Input>();
+            var uri = new Uri(input.link);
+            var baseDomain = $"{uri.Scheme}://{uri.Host}";
+
 
             // Expressão regular para encontrar links
             string pattern = @"<a\s+(?:[^>]*?\s+)?href\s*=\s*[""']([^""']*)[""']";
@@ -488,19 +494,19 @@ namespace Crawler
                     {
                         //var linkextractComplete = baseDomain + "/" + linkextract;
                         var linkextractComplete = new Uri(new Uri(baseDomain), linkextract);
-                        LogYellow($"Corrigingo link {linkextract} para {linkextractComplete}");
+                        LogYellow($"> Corrigingo link {linkextract} para {linkextractComplete}");
                         linkextract = linkextractComplete.ToString();
                     }
 
                     if (linkextract.Contains("javascript:void(0)"))
                     {
-                        LogYellow($"link {linkextract} ignorado - [javascript:void(0)]");
+                        LogYellow($"# link {linkextract} ignorado - [javascript:void(0)]");
                         continue;
                     }
 
                     if (input.blackList.Any(item => linkextract.Contains(item)))
                     {
-                        LogYellow($"link {linkextract} ignorado - [bloqueado]");
+                        LogYellow($"# link {linkextract} ignorado - [bloqueado]");
                         continue;
                     }
 
@@ -508,7 +514,7 @@ namespace Crawler
                     {
                         if (!input.whiteDomainList.Any(item => linkextract.Contains(item)))
                         {
-                            LogYellow($"link {linkextract} ignorado - [não liberado]");
+                            LogYellow($"# link {linkextract} ignorado - [não liberado]");
                             continue;
 
                         }
@@ -516,7 +522,7 @@ namespace Crawler
 
                     if (linkextract.Replace("/", "") == baseDomain.Replace("/", ""))
                     {
-                        LogYellow($"link {linkextract} ignorado - [igua a raiz]");
+                        LogYellow($"# link {linkextract} ignorado - [igua a raiz]");
                         continue;
 
                     }
@@ -524,21 +530,21 @@ namespace Crawler
                     if (linkextract == input.link)
                     {
 
-                        LogYellow($"link {linkextract} ignorado - [igua a raiz]");
+                        LogYellow($"# link {linkextract} ignorado - [igua a raiz]");
                         continue;
 
                     }
 
                     if (linkextract.Split('#').FirstOrDefault() == input.link.Split('#').FirstOrDefault())
                     {
-                        LogYellow($"link {linkextract} ignorado - [ancora para raiz]");
+                        LogYellow($"# link {linkextract} ignorado - [ancora para raiz]");
                         continue;
                     }
 
 
                     if (_validLinks.Where(_ => _.link == linkextract).Any())
                     {
-                        LogYellow($"link {linkextract} ignorado - [já extraido anteriomente]");
+                        LogRed($"# link {linkextract} ignorado - [já extraido anteriomente]");
                         continue;
                     }
 
@@ -559,12 +565,13 @@ namespace Crawler
                             waitForExit = input.waitForExit,
                             waitTimeout = input.waitTimeout,
                             cromeDriverTimeout = input.cromeDriverTimeout,
+                            savePartial = input.savePartial,
                         });
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogRed($" link {input.link} ignorado - [{ex.Message}]");
+                    LogRed($"# link {input.link} ignorado - [{ex.Message}]");
                 }
             }
 
@@ -756,7 +763,7 @@ namespace Crawler
         private static void LogRed(string msg)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"[{DateTime.Now}] -{msg}");
+            Console.WriteLine($"[{DateTime.Now}] - {msg}");
             Console.ResetColor();
         }
 
@@ -806,6 +813,7 @@ namespace Crawler
             {
                 { "paperWidth", 210 / 25.4 },
                 { "paperHeight", 297 / 25.4 },
+                { "scale", 0.9 },
             };
 
             var printOutput = _driver.ExecuteChromeCommandWithResult("Page.printToPDF", printOptions) as Dictionary<string, object>;

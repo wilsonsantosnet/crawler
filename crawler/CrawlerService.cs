@@ -41,9 +41,19 @@ namespace Crawler
                 //    link = "http://vivo.my.salesforce.com",
                 //    iteration = true
                 //},
+                //new Input {
+                //    id = 1,
+                //    link = "https://vivo.my.site.com/VivoStart/s/article/IT-Como-fazer-envio-de-protocolo-no-360",
+                //    iteration = true,
+                //}
+                //new Input {
+                //    id = 1,
+                //    link = "https://atento-vivovpe.plusoftomni.com.br/?m=menu.main.callcenter&dest=%2Fforms%2Fatentovivo.plugintabs.main.forms.signon%2F\"",
+                //    iteration = true,
+                //}
                 new Input {
                     id = 1,
-                    link = "https://vivo.my.site.com/VivoStart/s/article/IT-Como-fazer-envio-de-protocolo-no-360",
+                    link = "https://atento-vivo.inpaas.com/api/ckb-portal-online/portal-vivo/pt/inicio",
                     iteration = true,
                 }
             };
@@ -107,6 +117,22 @@ namespace Crawler
                 urls = new List<Input>();
                 var inputParam = new Input();
 
+
+                if (args.Where(_ => _.StartsWith("--configlists")).Any())
+                {
+                    if (!string.IsNullOrEmpty(_config.BlackList))
+                        inputParam.blackList.AddRange(_config.BlackList.Split(";"));
+                    if (!string.IsNullOrEmpty(_config.WhiteDomainList))
+                        inputParam.whiteDomainList.AddRange(_config.WhiteDomainList.Split(";"));
+                }
+
+
+                if (args.Where(_ => _.StartsWith("--configbasedomain")).Any())
+                {
+                    inputParam.baseDomain = _config.BaseDomain;
+                }
+
+
                 if (args.Where(_ => _.StartsWith("--url=")).Any())
                     inputParam.link = args.Where(_ => _.StartsWith("--url=")).FirstOrDefault().Split("=").LastOrDefault();
 
@@ -116,15 +142,6 @@ namespace Crawler
 
                 if (args.Where(_ => _.StartsWith("--selectorType=")).Any())
                     inputParam.selectorType = (Input.SelectorType)Convert.ToInt16(args.Where(_ => _.StartsWith("--selectorType=")).FirstOrDefault().Split("=").LastOrDefault());
-
-
-                if (args.Where(_ => _.StartsWith("--rules")).Any())
-                {
-                    if (!string.IsNullOrEmpty(_config.BlackList))
-                        inputParam.blackList.AddRange(_config.BlackList.Split(";"));
-                    if (!string.IsNullOrEmpty(_config.WhiteDomainList))
-                        inputParam.whiteDomainList.AddRange(_config.WhiteDomainList.Split(";"));
-                }
 
 
                 if (args.Where(_ => _.StartsWith("--waittimeout=")).Any())
@@ -146,6 +163,16 @@ namespace Crawler
                 if (args.Where(_ => _.StartsWith("--iteration")).Any())
                 {
                     inputParam.iteration = true;
+                }
+
+                if (args.Where(_ => _.StartsWith("--basedomain=")).Any())
+                {
+                    inputParam.baseDomain = args.Where(_ => _.StartsWith("--basedomain=")).FirstOrDefault().Split("=").LastOrDefault();
+                }
+
+                if (args.Where(_ => _.StartsWith("--basedomain=")).Any())
+                {
+                    inputParam.baseDomain = args.Where(_ => _.StartsWith("--basedomain=")).FirstOrDefault().Split("=").LastOrDefault();
                 }
 
                 if (args.Where(_ => _.StartsWith("--savepartial")).Any())
@@ -173,7 +200,8 @@ namespace Crawler
                             waitForExit = inputParam.waitForExit,
                             waitTimeout = inputParam.waitTimeout,
                             cromeDriverTimeout = inputParam.cromeDriverTimeout,
-                            savePartial = inputParam.savePartial
+                            savePartial = inputParam.savePartial,
+                            baseDomain = inputParam.baseDomain,
                         }); ;
                         count++;
                     }
@@ -390,7 +418,9 @@ namespace Crawler
                     selectorType = input.selectorType,
                     error = error,
                     sourceId = input.id,
-                    savePartial = input.savePartial
+                    savePartial = input.savePartial,
+                    baseDomain = input.baseDomain,
+
                 });
             }
         }
@@ -477,8 +507,7 @@ namespace Crawler
         HashSet<Input> GetLinksFromHtml(string html, Input input, string filePath)
         {
             var links = new HashSet<Input>();
-            var uri = new Uri(input.link);
-            var baseDomain = $"{uri.Scheme}://{uri.Host}";
+            var baseDomain = input.GetBaseDomain();
 
 
             // Expressão regular para encontrar links
@@ -494,6 +523,8 @@ namespace Crawler
                     {
                         //var linkextractComplete = baseDomain + "/" + linkextract;
                         var linkextractComplete = new Uri(new Uri(baseDomain), linkextract);
+                        linkextractComplete = applyRulesByBaseDomain(baseDomain, linkextract, linkextractComplete);
+
                         LogYellow($"> Corrigingo link {linkextract} para {linkextractComplete}");
                         linkextract = linkextractComplete.ToString();
                     }
@@ -566,6 +597,7 @@ namespace Crawler
                             waitTimeout = input.waitTimeout,
                             cromeDriverTimeout = input.cromeDriverTimeout,
                             savePartial = input.savePartial,
+                            baseDomain = input.baseDomain,
                         });
                     }
                 }
@@ -577,6 +609,25 @@ namespace Crawler
 
             return links;
         }
+
+        private static Uri applyRulesByBaseDomain(string baseDomain, string linkextract, Uri linkextractComplete)
+        {
+            if (baseDomain == "https://atento-vivo.inpaas.com/api/ckb-portal-online/portal-vivo/pt/")
+            {
+                LogYellow($"> aplicando regras de {baseDomain}");
+
+                var linkextractClear = linkextract
+                    .Replace("../pt/", "")
+                    .Replace("../", "")
+                    .Replace("./", "");
+
+
+                linkextractComplete = new Uri(new Uri(baseDomain), linkextractClear);
+            }
+
+            return linkextractComplete;
+        }
+
 
         async Task<string> GetHtmlFromUrlBySelenium(Input input, int errorCount)
         {

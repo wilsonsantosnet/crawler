@@ -13,6 +13,7 @@
             this.waitForExit = 60000;
 
 
+
         }
 
         public enum SelectorType { id, tag, classname }
@@ -46,7 +47,18 @@
 
         public bool savePartial { get; set; }
 
+        public string baseDomain { get; set; }
 
+        public string GetBaseDomain()
+        {
+            if (string.IsNullOrEmpty(this.baseDomain))
+            {
+                var uri = new Uri(this.link);
+                var baseDomain = $"{uri.Scheme}://{uri.Host}";
+                return baseDomain;
+            }
+            return this.baseDomain;
+        }
     }
 
 }

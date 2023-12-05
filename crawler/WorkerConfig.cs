@@ -46,5 +46,7 @@ namespace Crawler
 
         public Dictionary<string, string> ReplaceHtml { get; set; }
         public int TryCount { get; set; }
+
+        public string BaseDomain { get; set; }
     }
 }

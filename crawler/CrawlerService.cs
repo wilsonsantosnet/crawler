@@ -3,6 +3,7 @@ using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Support.UI;
 using System.Diagnostics;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -16,15 +17,17 @@ namespace Crawler
         private readonly HashSet<Input> _invalidLinks = new();
         private readonly HashSet<Input> _validLinks = new();
         private readonly WorkerConfig _config;
+        private readonly HttpClient _clientHttpToken;
         private readonly HttpClient _clientHttp;
 
         private ChromeDriver? _driver;
 
-        public CrawlerService(IOptions<WorkerConfig> config, HttpClient clientHttp)
+        public CrawlerService(IOptions<WorkerConfig> config, IHttpClientFactory clientHttp)
         {
 
             _config = config.Value;
-            _clientHttp = clientHttp;
+            _clientHttpToken = clientHttp.CreateClient("crawlerClient");
+            _clientHttp = clientHttp.CreateClient("crawlerClient");
         }
 
 
@@ -68,6 +71,7 @@ namespace Crawler
             var executeConvertMainUrls = false;
             var executeExtractLinks = false;
             var executeProcessFilesLinks = false;
+            var executeSendFilesOut = false;
 
             if (args.Length > 0)
             {
@@ -82,6 +86,9 @@ namespace Crawler
                 if (args.Where(_ => _ == "--p3").Any())
                     executeProcessFilesLinks = true;
 
+                if (args.Where(_ => _ == "--p4").Any())
+                    executeSendFilesOut = true;
+
                 urls = ExtraParameters(args, urls);
             }
             else
@@ -89,8 +96,9 @@ namespace Crawler
                 Console.WriteLine("sem parâmetros");
 
                 executeConvertMainUrls = false;
-                executeExtractLinks = true;
+                executeExtractLinks = false;
                 executeProcessFilesLinks = false;
+                executeSendFilesOut = true;
             }
 
             var urlJsonParm = JsonSerializer.Serialize(urls);
@@ -102,6 +110,12 @@ namespace Crawler
             if (executeExtractLinks) await ExtractLinks(urls);
 
             if (executeProcessFilesLinks) await ProcessFilesLinks();
+
+            if (executeSendFilesOut) await SendFilesOut();
+
+
+
+
 
             if (_driver != null)
                 _driver.Quit();
@@ -245,25 +259,128 @@ namespace Crawler
             SaveLinks(filePath, _invalidLinks.ToList());
         }
 
-        private void SaveLinksDataverse()
+        private async Task SendFilesOut()
         {
+            var clientId = "...";
+            var clientSecret = "...";
+
+            var resultToken = await GetTokenSendFileOut(clientId, clientSecret);
+
+            string[] files = Directory.GetFiles(_config.OutputFolderPathPDF, "*.pdf");
+
+            if (!files.Any())
+            {
+                LogRed("Nehum arquivo de pdf encontrado em " + AppContext.BaseDirectory);
+            }
+
+            foreach (var file in files)
+            {
+                var errorCount = 0;
+                await SendFileOutBase64(clientId, clientSecret, file, resultToken, errorCount);
+            }
+
+        }
+
+        private async Task SendFileOutBinary(string clientId, string filename, JsonElement resultToken)
+        {
+
+            //var teste = "https://app-atento-knowledgeassistant.azurewebsites.net/admin/api/Clients/97b01507-e1ff-4a54-a6b2-bf925a55a139/FormFiles?api-version=1.0"
+            var apiUrl = $"https://app-atento-knowledgeassistant.azurewebsites.net/admin/api/Clients/{clientId}/FormFiles?api-version=1.0";
+            //var base64File = ConvertPdfToBase64(filename);
+
+            resultToken.TryGetProperty("access_token", out var accessTokenElement);
+            // Adicionando o cabeçalho de autenticação
+            _clientHttp.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessTokenElement}");
+
+            var request = new HttpRequestMessage(HttpMethod.Post, apiUrl);
+
+            var content = new MultipartFormDataContent();
+            //content.Add(new StringContent(base64File), "Files");
+            var filebin = new StreamContent(File.OpenRead(filename));
+            content.Add(filebin);
+
+            // Adicionando Content-Disposition ao cabeçalho de conteúdo, não aos cabeçalhos padrão
+            content.Headers.ContentDisposition = new ContentDispositionHeaderValue("form-data")
+            {
+                Name = "\"Files\""
+            };
+
+            request.Content = content;
+
+            var response = await _clientHttp.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            Console.WriteLine(await response.Content.ReadAsStringAsync());
+        }
+
+        private async Task SendFileOutBase64(string clientId, string clientSecret, string filename, JsonElement resultToken, int errorCount)
+        {
+
             try
             {
-                var links = _validLinks.Select(_ => new { _.link });
+                var apiUrl = $"https://app-atento-knowledgeassistant.azurewebsites.net/admin/api/Clients/{clientId}/Files?api-version=1.0";
+                var base64File = ConvertPdfToBase64(filename);
+                resultToken.TryGetProperty("access_token", out var accessTokenElement);
 
-                _clientHttp.BaseAddress = new Uri($"{_config.Paurl}");
-                var responseGroup = _clientHttp.PostAsync("", new StringContent(JsonSerializer.Serialize(links), Encoding.UTF8, "application/json")).Result;
-                var statusCode = responseGroup.StatusCode;
-                var dataMyApi = responseGroup.Content.ReadAsStringAsync().Result;
+                _clientHttp.DefaultRequestHeaders.Clear();
+                _clientHttp.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessTokenElement}");
 
-                LogGreen(_validLinks.Count + " links salvos em " + _config.Paurl);
+                var request = new HttpRequestMessage(HttpMethod.Post, apiUrl);
 
+                var json = JsonSerializer.Serialize(new
+                {
+                    Files = new List<dynamic> {
+                    new {
+                        name = Path.GetFileName(filename),
+                        base64= base64File
+                    }
+                }
+                });
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                request.Content = content;
+                var response = await _clientHttp.SendAsync(request);
+                response.EnsureSuccessStatusCode();
+                var responseMsg = await response.Content.ReadAsStringAsync();
+                LogGreen(responseMsg);
             }
             catch (Exception ex)
             {
-                LogRed("Ocorreu um erro ao salvar no Dataverse: " + ex.Message);
-            }
+                LogRed($"{ex.Message} tentativa {errorCount}");
 
+                if (errorCount < 5)
+                {
+                    errorCount++;
+                    Thread.Sleep(1000 * errorCount);
+                    var resultToken2 = await GetTokenSendFileOut(clientId, clientSecret);
+                    await SendFileOutBase64(clientId, clientSecret, filename, resultToken2, errorCount);
+                }
+            }
+        }
+        private async Task<JsonElement> GetTokenSendFileOut(string clientId, string clientSecret)
+        {
+            //Obter Token Azure AD Client Credencial
+            var paramsUrlToken = new Dictionary<string, string>() {
+
+                {"grant_type" , "client_credentials" },
+            };
+
+            var urlToken = "https://mssecurity.atento.com.br/v2.0/connect/token";
+            var requestmsgToken = new HttpRequestMessage(HttpMethod.Post, urlToken)
+            {
+                Content = new FormUrlEncodedContent(paramsUrlToken)
+            };
+
+            var credentials = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{clientId}:{clientSecret}"));
+            requestmsgToken.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
+            var resToken = await _clientHttpToken.SendAsync(requestmsgToken);
+            var dataToken = await resToken.Content.ReadAsStringAsync();
+            var resultToken = JsonSerializer.Deserialize<JsonElement>(dataToken);
+            return resultToken;
+        }
+
+        static string ConvertPdfToBase64(string filePath)
+        {
+            byte[] fileBytes = File.ReadAllBytes(filePath);
+            return Convert.ToBase64String(fileBytes);
         }
         private async Task ConvertMainUrls(List<Input> inputs)
         {

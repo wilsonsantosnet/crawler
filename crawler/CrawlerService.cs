@@ -33,17 +33,17 @@ namespace Crawler
 
         public async Task Run(string[] args)
         {
-            var urls = new List<Input> {
-                new Input {
-                    id = 1,
-                    url = "https://wilsonsantosnet.medium.com/aks-comandos-de-cli-92eb12e4dc49",
-                    iteration = false,
-                },
-                 new Input {
-                    id = 2,
-                    url = "https://wilsonsantosnet.medium.com/docker-comandos-4e12f2838d59",
-                    iteration = false,
-                }
+            var inputs = new List<Input> {
+                //new Input {
+                //    id = 1,
+                //    url = "https://wilsonsantosnet.medium.com/aks-comandos-de-cli-92eb12e4dc49",
+                //    iteration = false,
+                //},
+                // new Input {
+                //    id = 2,
+                //    url = "https://wilsonsantosnet.medium.com/docker-comandos-4e12f2838d59",
+                //    iteration = false,
+                //}
             };
 
 
@@ -57,6 +57,7 @@ namespace Crawler
             var executeExtractLinks = false;
             var executeProcessFilesLinks = false;
             var executeSendFilesOut = false;
+            var loadFile = false;
 
             if (args.Length > 0)
             {
@@ -74,7 +75,7 @@ namespace Crawler
                 if (args.Where(_ => _ == "--p4").Any())
                     executeSendFilesOut = true;
 
-                urls = ExtraParameters(args, urls);
+                inputs = ExtraParameters(args, inputs);
             }
             else
             {
@@ -84,15 +85,20 @@ namespace Crawler
                 executeExtractLinks = false;
                 executeProcessFilesLinks = false;
                 executeSendFilesOut = false;
+                loadFile = true;
+
+
             }
 
-            var urlJsonParm = JsonSerializer.Serialize(urls);
+            var urlJsonParm = JsonSerializer.Serialize(inputs);
             LogYellow(urlJsonParm);
 
 
-            if (executeConvertMainUrls) await ConvertMainUrls(urls);
+            if (loadFile) LoadUrlsFromFile(inputs);
 
-            if (executeExtractLinks) await ExtractLinks(urls);
+            if (executeConvertMainUrls) await ConvertMainUrls(inputs);
+
+            if (executeExtractLinks) await ExtractLinks(inputs);
 
             if (executeProcessFilesLinks) await ProcessFilesLinks();
 
@@ -181,29 +187,7 @@ namespace Crawler
 
                 if (args.Where(_ => _.StartsWith("--file=")).Any())
                 {
-                    var file = args.Where(_ => _.StartsWith("--file=")).FirstOrDefault().Split("=").LastOrDefault();
-                    var alllinks = ReadAllLines(file);
-
-                    var count = 0;
-                    foreach (var item in alllinks)
-                    {
-
-                        urls.Add(new Input
-                        {
-                            url = item,
-                            iteration = count == 0 ? true : false,
-                            whiteDomainList = inputParam.whiteDomainList,
-                            blackList = inputParam.blackList,
-                            selectorType = inputParam.selectorType,
-                            selector = inputParam.selector,
-                            waitForExit = inputParam.waitForExit,
-                            waitTimeout = inputParam.waitTimeout,
-                            cromeDriverTimeout = inputParam.cromeDriverTimeout,
-                            savePartial = inputParam.savePartial,
-                            baseDomain = inputParam.baseDomain,
-                        }); ;
-                        count++;
-                    }
+                    LoadUrlsFromFile(args, urls, inputParam);
                 }
                 else
                 {
@@ -213,6 +197,51 @@ namespace Crawler
             }
 
             return urls;
+        }
+
+        private static void LoadUrlsFromFile(List<Input> inputs)
+        {
+            var file = "url-input.txt";
+            var alllinks = ReadAllLines(file);
+
+            var count = 0;
+            foreach (var item in alllinks)
+            {
+
+                inputs.Add(new Input
+                {
+                    url = item,
+                    iteration = false,
+                    id = count++,
+                });
+            }
+        }
+
+        private static void LoadUrlsFromFile(string[] args, List<Input> inputs, Input parameters = null)
+        {
+            var file = args.Where(_ => _.StartsWith("--file=")).FirstOrDefault().Split("=").LastOrDefault();
+            var alllinks = ReadAllLines(file);
+
+            var count = 0;
+            foreach (var item in alllinks)
+            {
+
+                inputs.Add(new Input
+                {
+                    url = item,
+                    iteration = count == 0 ? true : false,
+                    whiteDomainList = parameters.whiteDomainList,
+                    blackList = parameters.blackList,
+                    selectorType = parameters.selectorType,
+                    selector = parameters.selector,
+                    waitForExit = parameters.waitForExit,
+                    waitTimeout = parameters.waitTimeout,
+                    cromeDriverTimeout = parameters.cromeDriverTimeout,
+                    savePartial = parameters.savePartial,
+                    baseDomain = parameters.baseDomain,
+                }); ;
+                count++;
+            }
         }
 
         private static string[] ReadAllLines(string? file)
@@ -1051,7 +1080,7 @@ namespace Crawler
             }
         }
 
-        
+
 
     }
 }

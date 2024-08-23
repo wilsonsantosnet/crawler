@@ -1,1 +1,2 @@
-﻿
+﻿https://wilsonsantosnet.medium.com/aks-comandos-de-cli-92eb12e4dc49
+https://wilsonsantosnet.medium.com/docker-comandos-4e12f2838d59

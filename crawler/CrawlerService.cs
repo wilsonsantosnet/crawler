@@ -34,30 +34,15 @@ namespace Crawler
         public async Task Run(string[] args)
         {
             var urls = new List<Input> {
-                //new Input {
-                //    id = 1,
-                //    link = "http://seuportal.vivo.com.br/nosso_portal/movel/movel_pf/",
-                //    iteration = true
-                //},
-                //new Input {
-                //    id = 1,
-                //    link = "http://vivo.my.salesforce.com",
-                //    iteration = true
-                //},
-                //new Input {
-                //    id = 1,
-                //    link = "https://vivo.my.site.com/VivoStart/s/article/IT-Como-fazer-envio-de-protocolo-no-360",
-                //    iteration = true,
-                //}
-                //new Input {
-                //    id = 1,
-                //    link = "https://atento-vivovpe.plusoftomni.com.br/?m=menu.main.callcenter&dest=%2Fforms%2Fatentovivo.plugintabs.main.forms.signon%2F\"",
-                //    iteration = true,
-                //}
                 new Input {
                     id = 1,
-                    link = "https://atento-vivo.inpaas.com/api/ckb-portal-online/portal-vivo/pt/inicio",
-                    iteration = true,
+                    url = "https://wilsonsantosnet.medium.com/aks-comandos-de-cli-92eb12e4dc49",
+                    iteration = false,
+                },
+                 new Input {
+                    id = 2,
+                    url = "https://wilsonsantosnet.medium.com/docker-comandos-4e12f2838d59",
+                    iteration = false,
                 }
             };
 
@@ -95,10 +80,10 @@ namespace Crawler
             {
                 Console.WriteLine("sem parâmetros");
 
-                executeConvertMainUrls = false;
+                executeConvertMainUrls = true;
                 executeExtractLinks = false;
                 executeProcessFilesLinks = false;
-                executeSendFilesOut = true;
+                executeSendFilesOut = false;
             }
 
             var urlJsonParm = JsonSerializer.Serialize(urls);
@@ -148,7 +133,7 @@ namespace Crawler
 
 
                 if (args.Where(_ => _.StartsWith("--url=")).Any())
-                    inputParam.link = args.Where(_ => _.StartsWith("--url=")).FirstOrDefault().Split("=").LastOrDefault();
+                    inputParam.url = args.Where(_ => _.StartsWith("--url=")).FirstOrDefault().Split("=").LastOrDefault();
 
 
                 if (args.Where(_ => _.StartsWith("--selector=")).Any())
@@ -205,7 +190,7 @@ namespace Crawler
 
                         urls.Add(new Input
                         {
-                            link = item,
+                            url = item,
                             iteration = count == 0 ? true : false,
                             whiteDomainList = inputParam.whiteDomainList,
                             blackList = inputParam.blackList,
@@ -248,7 +233,7 @@ namespace Crawler
         private void SaveValidLinks()
         {
 
-            var clear_validLinks = _validLinks.Where(_ => !_invalidLinks.Where(__ => __.link == _.link).Any()).ToList();
+            var clear_validLinks = _validLinks.Where(_ => !_invalidLinks.Where(__ => __.url == _.url).Any()).ToList();
             var filePath = "all-links.json";
             SaveLinks(filePath, clear_validLinks);
         }
@@ -522,14 +507,14 @@ namespace Crawler
             }
             catch (Exception ex)
             {
-                var error = $"# Ocorreu um erro no link: {input.link} [" + ex.Message + "]  adicionado como invalido";
+                var error = $"# Ocorreu um erro no link: {input.url} [" + ex.Message + "]  adicionado como invalido";
                 LogRed(error);
 
                 _invalidLinks.Add(new Input
                 {
 
                     id = _invalidLinks.Count(),
-                    link = input.link,
+                    url = input.url,
                     selector = input.selector,
                     iteration = input.iteration,
                     selectorType = input.selectorType,
@@ -548,12 +533,12 @@ namespace Crawler
             // Salve o HTML no arquivo
             //File.WriteAllTextAsync(fileNameHtml, content);
             WriteAllText(content, fileNameHtml);
-            LogGreen("HTML " + input.id + " da página " + input.link + " salvo em " + fileNameHtml);
+            LogGreen("HTML " + input.id + " da página " + input.url + " salvo em " + fileNameHtml);
         }
 
         private async Task GetLink(Input input)
         {
-            string filePath = GetValidFileName(input.link + ".log");
+            string filePath = input.GetValidFileName(input.url + ".log");
 
             try
             {
@@ -563,11 +548,11 @@ namespace Crawler
                 if (string.IsNullOrEmpty(content))
                 {
                     _invalidLinks.Add(input);
-                    LogYellow("* Link " + input.link + " adicionado como invalido [html vazio]");
+                    LogYellow("* Link " + input.url + " adicionado como invalido [html vazio]");
                     return;
                 }
 
-                LogYellow("* Link " + input.link + " adicionado como valido");
+                LogYellow("* Link " + input.url + " adicionado como valido");
                 _validLinks.Add(input);
 
                 await ConvertContentHtmlPDF(input, content, errorCount);
@@ -578,7 +563,7 @@ namespace Crawler
 
                 if (sublinks.Count > 0)
                 {
-                    var newlinks = sublinks.Where(link => !_validLinks.Any(validLink => validLink.link == link.link)).ToList();
+                    var newlinks = sublinks.Where(link => !_validLinks.Any(validLink => validLink.url == link.url)).ToList();
                     SaveLinks(filePath, newlinks);
 
 
@@ -589,12 +574,12 @@ namespace Crawler
                 }
                 else
                 {
-                    LogYellow("Nenhum link encontrado na página " + input.link);
+                    LogYellow("Nenhum link encontrado na página " + input.url);
                 }
             }
             catch (Exception ex)
             {
-                LogRed("Ocorreu um erro: para acessar " + input.link + ": " + ex.Message);
+                LogRed("Ocorreu um erro: para acessar " + input.url + ": " + ex.Message);
             }
         }
 
@@ -675,7 +660,7 @@ namespace Crawler
 
                     }
 
-                    if (linkextract == input.link)
+                    if (linkextract == input.url)
                     {
 
                         LogYellow($"# link {linkextract} ignorado - [igua a raiz]");
@@ -683,26 +668,26 @@ namespace Crawler
 
                     }
 
-                    if (linkextract.Split('#').FirstOrDefault() == input.link.Split('#').FirstOrDefault())
+                    if (linkextract.Split('#').FirstOrDefault() == input.url.Split('#').FirstOrDefault())
                     {
                         LogYellow($"# link {linkextract} ignorado - [ancora para raiz]");
                         continue;
                     }
 
 
-                    if (_validLinks.Where(_ => _.link == linkextract).Any())
+                    if (_validLinks.Where(_ => _.url == linkextract).Any())
                     {
                         LogRed($"# link {linkextract} ignorado - [já extraido anteriomente]");
                         continue;
                     }
 
 
-                    if (!links.Where(_ => _.link == linkextract).Any())
+                    if (!links.Where(_ => _.url == linkextract).Any())
                     {
                         links.Add(new Input
                         {
                             id = id++,
-                            link = linkextract,
+                            url = linkextract,
                             selector = input.selector,
                             iteration = false,
                             selectorType = input.selectorType,
@@ -720,7 +705,7 @@ namespace Crawler
                 }
                 catch (Exception ex)
                 {
-                    LogRed($"# link {input.link} ignorado - [{ex.Message}]");
+                    LogRed($"# link {input.url} ignorado - [{ex.Message}]");
                 }
             }
 
@@ -754,11 +739,11 @@ namespace Crawler
 
             try
             {
-                LogGreen($"navegando para: {input.link}");
+                LogGreen($"navegando para: {input.url}");
 
                 driver.Manage().Timeouts().PageLoad = TimeSpan.FromSeconds(input.cromeDriverTimeout); // Ajuste o tempo limite conforme necessário
 
-                driver.Navigate().GoToUrl(HttpUtility.UrlDecode(input.link));
+                driver.Navigate().GoToUrl(HttpUtility.UrlDecode(input.url));
 
                 // Aguarda até que a página esteja totalmente carregada
                 var wait = new WebDriverWait(driver, TimeSpan.FromSeconds(10));
@@ -823,7 +808,7 @@ namespace Crawler
             }
             catch (Exception ex)
             {
-                var error = $"Erro ao navegar para: {input.link} [{ex.Message}] tentativa:{errorCount}";
+                var error = $"Erro ao navegar para: {input.url} [{ex.Message}] tentativa:{errorCount}";
                 LogRed(error);
 
                 errorCount++;
@@ -883,7 +868,7 @@ namespace Crawler
 
         private async Task imagesDownload(Input input, IWebDriver driver)
         {
-            LogGreen($"Baixando as imagens da pagina {input.link}");
+            LogGreen($"Baixando as imagens da pagina {input.url}");
 
 
             var images = driver.FindElements(By.TagName("img"));
@@ -990,11 +975,11 @@ namespace Crawler
 
             if (File.Exists(pdfFilePath))
             {
-                LogGreen("ChromeDriver - PDF " + input.id + " da página " + input.link + " salvo em " + pdfFilePath);
+                LogGreen("ChromeDriver - PDF " + input.id + " da página " + input.url + " salvo em " + pdfFilePath);
             }
             else
             {
-                var error = "ChromeDriver - PDF da página " + input.link + " não encontrado em " + pdfFilePath;
+                var error = "ChromeDriver - PDF da página " + input.url + " não encontrado em " + pdfFilePath;
                 LogRed(error);
                 throw new Exception(error);
             }
@@ -1025,11 +1010,11 @@ namespace Crawler
 
             if (File.Exists(pdfFilePath))
             {
-                LogGreen("Chrome - PDF " + input.id + " da página " + input.link + " salvo em " + pdfFilePath);
+                LogGreen("Chrome - PDF " + input.id + " da página " + input.url + " salvo em " + pdfFilePath);
             }
             else
             {
-                var error = "Chrome - PDF da página " + input.link + " não encontrado em " + pdfFilePath;
+                var error = "Chrome - PDF da página " + input.url + " não encontrado em " + pdfFilePath;
                 LogRed(error);
 
                 throw new Exception(error);
@@ -1055,26 +1040,18 @@ namespace Crawler
 
             if (File.Exists(pdfFilePath))
             {
-                LogGreen("Wkhtmltopdf - PDF " + input.id + " da página " + input.link + " salvo em " + pdfFilePath);
+                LogGreen("Wkhtmltopdf - PDF " + input.id + " da página " + input.url + " salvo em " + pdfFilePath);
 
             }
             else
             {
-                var error = "Wkhtmltopdf - PDF da página " + input.link + " não encontrado em " + pdfFilePath;
+                var error = "Wkhtmltopdf - PDF da página " + input.url + " não encontrado em " + pdfFilePath;
                 LogGreen(error);
                 throw new Exception(error);
             }
         }
 
-        static string GetValidFileName(string fileName)
-        {
-            foreach (char c in Path.GetInvalidFileNameChars())
-            {
-                fileName = fileName.Replace(c, '_');
-            }
-
-            return fileName.Replace(';', '_');
-        }
+        
 
     }
 }

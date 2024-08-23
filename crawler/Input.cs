@@ -11,6 +11,7 @@
             this.cromeDriverTimeout = 240;
             this.waitTimeout = 6000;
             this.waitForExit = 60000;
+            this.url = string.Empty;
 
 
 
@@ -20,7 +21,7 @@
 
         public int id { get; set; }
         public SelectorType selectorType { get; set; }
-        public string link { get; set; }
+        public string url { get; set; }
         public string selector { get; set; }
 
         public bool iteration { get; set; }
@@ -35,9 +36,9 @@
 
         public List<string> whiteDomainList { get; set; }
 
-        public string filenameHTML { get { return this.prefixo + "-" + this.id + ".html"; } }
+        public string filenameHTML { get { return this.prefixo + "-" + this.id + "-" + (this.url.Length > 100 ? this.GetValidFileName(this.url[..150]) : this.GetValidFileName(this.url)) + ".html"; } }
 
-        public string filenamePDF { get { return this.prefixo + "-" + this.id + ".pdf"; } }
+        public string filenamePDF { get { return this.prefixo + "-" + this.id + "-" + (this.url.Length > 100 ? this.GetValidFileName(this.url[..150]) : this.GetValidFileName(this.url)) + ".pdf"; } }
 
         public int cromeDriverTimeout { get; set; }
 
@@ -53,11 +54,21 @@
         {
             if (string.IsNullOrEmpty(this.baseDomain))
             {
-                var uri = new Uri(this.link);
+                var uri = new Uri(this.url);
                 var baseDomain = $"{uri.Scheme}://{uri.Host}";
                 return baseDomain;
             }
             return this.baseDomain;
+        }
+
+        public string GetValidFileName(string fileName)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                fileName = fileName.Replace(c, '_');
+            }
+
+            return fileName.Replace(';', '_');
         }
     }
 
